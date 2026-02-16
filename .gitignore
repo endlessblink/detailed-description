@@ -1,0 +1,37 @@
+# Build output
+main.js
+main.js.map
+*.js.map
+
+# Dependencies
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# npm
+npm-debug.log*
+.npm
+
+# TypeScript
+*.tsbuildinfo
+
+# ESLint
+.eslintcache
+
+# Environment
+.env
+.env.*
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Tool-specific
+.claude/
+.omc/
