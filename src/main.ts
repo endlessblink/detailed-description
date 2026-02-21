@@ -1,5 +1,5 @@
 import { Plugin, TFile, Notice, Menu, ItemView } from 'obsidian';
-import { DetailedCanvasSettings, CanvasLinkData, EnrichmentResult } from './types';
+import { DetailedCanvasSettings, CanvasLinkData, EnrichmentResult, CanvasNodeInstance } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { DetailedCanvasSettingTab } from './settings';
 import { OllamaClient } from './services/ollama';
@@ -8,6 +8,13 @@ import { NoteGeneratorService } from './services/note-generator';
 import { CanvasMonitor } from './canvas/monitor';
 import { CanvasTransformer } from './canvas/transformer';
 import { isValidUrl } from './canvas/utils';
+
+// Module augmentation for internal canvas events
+declare module 'obsidian' {
+  interface Workspace {
+    on(name: 'canvas:node-menu', callback: (menu: Menu, node: CanvasNodeInstance) => void): EventRef;
+  }
+}
 
 export default class DetailedCanvasPlugin extends Plugin {
   settings!: DetailedCanvasSettings;
@@ -35,7 +42,7 @@ export default class DetailedCanvasPlugin extends Plugin {
     // Initialize canvas monitor
     this.canvasMonitor = new CanvasMonitor(
       this.app,
-      (file, node) => this.handleNewLinkNode(file, node)
+      (file, node) => { void this.handleNewLinkNode(file, node); }
     );
 
     // Start watching if auto-enrich is enabled
@@ -55,7 +62,7 @@ export default class DetailedCanvasPlugin extends Plugin {
         if (selection.length === 0) return false;
 
         if (!checking) {
-          this.enrichSelectedLinks(canvasView);
+          void this.enrichSelectedLinks(canvasView);
         }
         return true;
       }
@@ -69,7 +76,7 @@ export default class DetailedCanvasPlugin extends Plugin {
         if (!canvasFile) return false;
 
         if (!checking) {
-          this.enrichAllLinksInCanvas(canvasFile);
+          void this.enrichAllLinksInCanvas(canvasFile);
         }
         return true;
       }
@@ -78,9 +85,9 @@ export default class DetailedCanvasPlugin extends Plugin {
     // Register context menu for canvas nodes
     // Note: 'canvas:node-menu' is not in the official Obsidian API types, but works in practice
     this.registerEvent(
-      (this.app.workspace as any).on('canvas:node-menu', (menu: Menu, node: any) => {
+      this.app.workspace.on('canvas:node-menu', (menu: Menu, node: CanvasNodeInstance) => {
         const nodeData = node.getData?.();
-        if (nodeData?.type === 'link' && isValidUrl(nodeData.url)) {
+        if (nodeData && nodeData.type === 'link' && typeof nodeData.url === 'string' && isValidUrl(nodeData.url)) {
           menu.addItem((item) => {
             item
               .setTitle('Enrich with AI description')
@@ -88,7 +95,7 @@ export default class DetailedCanvasPlugin extends Plugin {
               .onClick(() => {
                 const canvasFile = this.getActiveCanvasFile();
                 if (canvasFile) {
-                  this.enrichLinkNode(canvasFile, nodeData);
+                  void this.enrichLinkNode(canvasFile, nodeData as unknown as CanvasLinkData);
                 }
               });
           });
@@ -250,20 +257,24 @@ export default class DetailedCanvasPlugin extends Plugin {
   private getActiveCanvasFile(): TFile | null {
     const view = this.getActiveCanvasView();
     if (!view) return null;
-    return (view as any).file as TFile;
+    if ('file' in view && view.file instanceof TFile) {
+      return view.file;
+    }
+    return null;
   }
 
   // Helper: Get selected link nodes from canvas view
   private getSelectedLinkNodes(canvasView: ItemView): CanvasLinkData[] {
     try {
-      const canvas = (canvasView as any).canvas;
+      if (!('canvas' in canvasView)) return [];
+      const { canvas } = canvasView as ItemView & { canvas: { selection?: Set<CanvasNodeInstance> } | undefined };
       if (!canvas?.selection) return [];
 
       const selected: CanvasLinkData[] = [];
       for (const node of canvas.selection) {
         const data = node.getData?.();
-        if (data?.type === 'link' && isValidUrl(data.url)) {
-          selected.push(data as CanvasLinkData);
+        if (data && data.type === 'link' && typeof data.url === 'string' && isValidUrl(data.url)) {
+          selected.push(data as unknown as CanvasLinkData);
         }
       }
       return selected;

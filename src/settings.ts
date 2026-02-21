@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
+import { App, PluginSettingTab, Setting, Notice, Plugin, Modal } from 'obsidian';
 import { DetailedCanvasSettings } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { OllamaClient } from './services/ollama';
@@ -6,7 +6,7 @@ import { OllamaClient } from './services/ollama';
 /**
  * Type for the plugin interface used in settings
  */
-interface DetailedCanvasPlugin {
+interface DetailedCanvasPlugin extends Plugin {
   settings: DetailedCanvasSettings;
   saveSettings(): Promise<void>;
 }
@@ -19,7 +19,7 @@ export class DetailedCanvasSettingTab extends PluginSettingTab {
   plugin: DetailedCanvasPlugin;
 
   constructor(app: App, plugin: DetailedCanvasPlugin) {
-    super(app, plugin as any);
+    super(app, plugin);
     this.plugin = plugin;
   }
 
@@ -28,7 +28,7 @@ export class DetailedCanvasSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     // Ollama configuration section
-    containerEl.createEl('h2', { text: 'Ollama configuration' });
+    new Setting(containerEl).setName('Ollama configuration').setHeading();
 
     // Ollama endpoint with test connection button
     new Setting(containerEl)
@@ -52,9 +52,9 @@ export class DetailedCanvasSettingTab extends PluginSettingTab {
           try {
             const isConnected = await client.checkConnection();
             if (isConnected) {
-              new Notice('Successfully connected to Ollama!');
+              new Notice('Connection successful!');
             } else {
-              new Notice('Failed to connect to Ollama. Check your endpoint and ensure Ollama is running.');
+              new Notice('Connection failed. Check your endpoint URL and make sure the server is running.');
             }
           } catch (error) {
             const message = error instanceof Error ? error.message : 'Unknown error';
@@ -123,7 +123,7 @@ export class DetailedCanvasSettingTab extends PluginSettingTab {
       }));
 
     // Behavior section
-    containerEl.createEl('h2', { text: 'Behavior' });
+    new Setting(containerEl).setName('Behavior').setHeading();
 
     // Auto-enrich toggle
     new Setting(containerEl)
@@ -175,7 +175,7 @@ export class DetailedCanvasSettingTab extends PluginSettingTab {
         }));
 
     // Advanced section
-    containerEl.createEl('h2', { text: 'Advanced' });
+    new Setting(containerEl).setName('Advanced').setHeading();
 
     // System prompt textarea
     new Setting(containerEl)
@@ -204,22 +204,47 @@ export class DetailedCanvasSettingTab extends PluginSettingTab {
       .addButton(button => button
         .setButtonText('Reset')
         .setWarning()
-        .onClick(async () => {
-          // Confirm before resetting
-          const confirmed = confirm(
-            'Are you sure you want to reset all settings to their default values? This cannot be undone.'
-          );
-
-          if (confirmed) {
-            // Reset all settings
+        .onClick(() => {
+          new ConfirmResetModal(this.app, () => {
             Object.assign(this.plugin.settings, DEFAULT_SETTINGS);
-            await this.plugin.saveSettings();
-
-            // Reload the settings tab to show new values
-            this.display();
-
-            new Notice('Settings reset to defaults');
-          }
+            void this.plugin.saveSettings().then(() => {
+              this.display();
+              new Notice('Settings reset to defaults');
+            });
+          }).open();
         }));
+  }
+}
+
+class ConfirmResetModal extends Modal {
+  private onConfirm: () => void;
+
+  constructor(app: App, onConfirm: () => void) {
+    super(app);
+    this.onConfirm = onConfirm;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl('p', {
+      text: 'Are you sure you want to reset all settings to their default values? This cannot be undone.'
+    });
+
+    new Setting(contentEl)
+      .addButton(btn => btn
+        .setButtonText('Cancel')
+        .onClick(() => this.close()))
+      .addButton(btn => btn
+        .setButtonText('Reset')
+        .setWarning()
+        .onClick(() => {
+          this.onConfirm();
+          this.close();
+        }));
+  }
+
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
   }
 }

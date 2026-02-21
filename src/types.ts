@@ -87,3 +87,8 @@ export interface EnrichmentResult {
   notePath?: string;
   error?: string;
 }
+
+// Internal canvas types (not in official Obsidian API)
+export interface CanvasNodeInstance {
+  getData?(): Record<string, unknown> | undefined;
+}

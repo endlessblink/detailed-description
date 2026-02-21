@@ -23,7 +23,7 @@ export class NoteGeneratorService {
 		const baseName = this.sanitizeFileName(metadata.title || 'Untitled');
 
 		// Get a unique file path (handles collisions)
-		const filePath = await this.getUniqueFilePath(folder, baseName);
+		const filePath = this.getUniqueFilePath(folder, baseName);
 
 		// Generate the markdown content
 		const content = this.generateMarkdown(metadata, aiDescription);
@@ -99,7 +99,7 @@ export class NoteGeneratorService {
 	/**
 	 * Gets a unique file path, appending a timestamp if a collision is detected
 	 */
-	private async getUniqueFilePath(folder: string, baseName: string): Promise<string> {
+	private getUniqueFilePath(folder: string, baseName: string): string {
 		const normalizedFolder = normalizePath(folder);
 		let fileName = `${baseName}.md`;
 		let filePath = normalizePath(`${normalizedFolder}/${fileName}`);

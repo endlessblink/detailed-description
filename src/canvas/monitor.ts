@@ -16,7 +16,7 @@ export class CanvasMonitor extends Events {
 	startWatching(): void {
 		this.modifyHandler = this.app.vault.on('modify', (file) => {
 			if (file instanceof TFile && file.extension === 'canvas') {
-				this.checkForNewLinks(file);
+				void this.checkForNewLinks(file);
 			}
 		});
 	}
