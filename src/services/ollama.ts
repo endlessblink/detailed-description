@@ -91,7 +91,7 @@ export class OllamaClient {
 
       return response.status === 200;
     } catch (error) {
-      console.error('Failed to check Ollama connection:', error);
+      console.debug('Failed to check Ollama connection:', error);
       return false;
     }
   }

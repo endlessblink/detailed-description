@@ -13,9 +13,6 @@ export class ScraperService {
       const response = await requestUrl({
         url,
         method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
         throw: false,
       });
 
@@ -49,7 +46,7 @@ export class ScraperService {
         textContent,
       };
     } catch (error) {
-      console.error(`Error scraping URL ${url}:`, error);
+      console.warn(`Error scraping URL ${url}:`, error);
       return this.createEmptyMetadata(url);
     }
   }
@@ -223,7 +220,7 @@ export class ScraperService {
       // Resolve relative URL
       return new URL(relative, base).href;
     } catch (error) {
-      console.error('Error resolving URL:', error);
+      console.warn('Error resolving URL:', error);
       return relative;
     }
   }

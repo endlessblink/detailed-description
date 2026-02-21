@@ -1,7 +1,7 @@
-import { App, TFile, Events, EventRef } from 'obsidian';
+import { App, TFile, EventRef } from 'obsidian';
 import { CanvasData, CanvasLinkData } from '../types';
 
-export class CanvasMonitor extends Events {
+export class CanvasMonitor {
 	private seenNodes: Map<string, Set<string>> = new Map(); // canvasPath -> nodeIds
 	private initializedCanvases: Set<string> = new Set(); // canvases that have been scanned at least once
 	private modifyHandler: EventRef | null = null;
@@ -9,11 +9,13 @@ export class CanvasMonitor extends Events {
 	constructor(
 		private app: App,
 		private onNewLinkNode: (file: TFile, node: CanvasLinkData) => void
-	) {
-		super();
-	}
+	) {}
 
 	startWatching(): void {
+		// Prevent duplicate listeners if called multiple times
+		if (this.modifyHandler) {
+			this.app.vault.offref(this.modifyHandler);
+		}
 		this.modifyHandler = this.app.vault.on('modify', (file) => {
 			if (file instanceof TFile && file.extension === 'canvas') {
 				void this.checkForNewLinks(file);

@@ -3,7 +3,7 @@
   "name": "Detailed Canvas",
   "version": "1.0.0",
   "minAppVersion": "1.4.0",
-  "description": "Enrich canvas link cards with AI-generated descriptions and cover images using Ollama.",
+  "description": "Enrich canvas link cards with AI-generated descriptions using Ollama.",
   "author": "endlessblink",
   "authorUrl": "https://github.com/endlessblink",
   "isDesktopOnly": true

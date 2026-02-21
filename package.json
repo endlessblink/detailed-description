@@ -1,12 +1,12 @@
 {
   "name": "detailed-canvas",
   "version": "1.0.0",
-  "description": "Enrich canvas link cards with AI-generated descriptions and cover images using Ollama.",
+  "description": "Enrich canvas link cards with AI-generated descriptions using Ollama.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "lint": "eslint . --ext .ts"
+    "lint": "eslint --config eslint.config.mjs src/"
   },
   "keywords": [
     "obsidian",
