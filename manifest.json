@@ -6,5 +6,5 @@
   "description": "Enrich canvas link cards with AI-generated descriptions using Ollama.",
   "author": "endlessblink",
   "authorUrl": "https://github.com/endlessblink",
-  "isDesktopOnly": true
+  "isDesktopOnly": false
 }
