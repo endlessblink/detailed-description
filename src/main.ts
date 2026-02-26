@@ -153,6 +153,9 @@ export default class DetailedCanvasPlugin extends Plugin {
     this.processingNodes.add(nodeKey);
 
     try {
+      // Show placeholder text on the card while processing
+      await this.updateCanvasNodeTextWithRetry(node.id, `Loading...\n\n${node.url}`);
+
       if (this.settings.showNotifications) {
         new Notice(`Enriching: ${node.url}`);
       }
@@ -183,7 +186,7 @@ export default class DetailedCanvasPlugin extends Plugin {
       const cardText = `${imageLine}## [${title}](${node.url})\n\n${desc}\n\n*${siteName}*`;
 
       // Step 4: Update the text node directly on the canvas
-      const updated = this.updateCanvasNodeText(node.id, cardText);
+      const updated = await this.updateCanvasNodeTextWithRetry(node.id, cardText);
 
       if (!updated) {
         throw new Error('Failed to update canvas node');
@@ -238,6 +241,18 @@ export default class DetailedCanvasPlugin extends Plugin {
     } catch {
       return false;
     }
+  }
+
+  // Retry wrapper for updateCanvasNodeText (canvas internal state may lag behind file changes)
+  private async updateCanvasNodeTextWithRetry(nodeId: string, text: string, retries = 3): Promise<boolean> {
+    for (let i = 0; i < retries; i++) {
+      if (this.updateCanvasNodeText(nodeId, text)) {
+        return true;
+      }
+      // Wait for canvas internal state to sync
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    return false;
   }
 
   // Enrich selected links in canvas view

@@ -2,6 +2,9 @@ import { requestUrl } from 'obsidian';
 import { UrlMetadata } from '../types';
 
 export class ScraperService {
+  private static readonly TWITTER_HOSTS = ['twitter.com', 'www.twitter.com', 'x.com', 'www.x.com'];
+  private static readonly TWITTER_STATUS_RE = /\/([^/]+)\/status\/(\d+)/;
+
   /**
    * Scrape metadata and content from a URL
    * @param url - The URL to scrape
@@ -9,6 +12,12 @@ export class ScraperService {
    */
   async scrape(url: string): Promise<UrlMetadata> {
     try {
+      // Use fxtwitter API for X/Twitter URLs
+      const host = new URL(url).hostname.toLowerCase();
+      if (ScraperService.TWITTER_HOSTS.includes(host)) {
+        return await this.scrapeTwitter(url);
+      }
+
       // Fetch URL using Obsidian's requestUrl API (bypasses CORS)
       const response = await requestUrl({
         url,
@@ -49,6 +58,63 @@ export class ScraperService {
     } catch (error) {
       console.warn(`Error scraping URL ${url}:`, error);
       return this.createEmptyMetadata(url);
+    }
+  }
+
+  /**
+   * Scrape X/Twitter URLs via fxtwitter JSON API
+   */
+  private async scrapeTwitter(originalUrl: string): Promise<UrlMetadata> {
+    const match = originalUrl.match(ScraperService.TWITTER_STATUS_RE);
+    if (!match) {
+      return this.createEmptyMetadata(originalUrl);
+    }
+
+    const [, screenName, tweetId] = match;
+    const apiUrl = `https://api.fxtwitter.com/${screenName}/status/${tweetId}`;
+
+    try {
+      const response = await requestUrl({
+        url: apiUrl,
+        method: 'GET',
+        headers: { 'User-Agent': 'DetailedCanvas-ObsidianPlugin/1.0' },
+        throw: false,
+      });
+
+      if (response.status !== 200) {
+        console.warn(`fxtwitter API returned ${response.status} for ${originalUrl}`);
+        return this.createEmptyMetadata(originalUrl);
+      }
+
+      const data = response.json;
+      const tweet = data?.tweet;
+      if (!tweet) {
+        return this.createEmptyMetadata(originalUrl);
+      }
+
+      // Extract first photo as OG image
+      let ogImage: string | null = null;
+      if (tweet.media?.photos?.length > 0) {
+        ogImage = tweet.media.photos[0].url ?? null;
+      }
+
+      // Validate image accessibility
+      if (ogImage) {
+        ogImage = await this.validateImageUrl(ogImage);
+      }
+
+      return {
+        url: originalUrl,
+        title: `${tweet.author?.name ?? screenName} (@${tweet.author?.screen_name ?? screenName})`,
+        description: tweet.text ?? null,
+        ogImage,
+        siteName: 'X (Twitter)',
+        favicon: tweet.author?.avatar_url ?? null,
+        textContent: tweet.text ?? '',
+      };
+    } catch (error) {
+      console.warn(`fxtwitter scrape failed for ${originalUrl}:`, error);
+      return this.createEmptyMetadata(originalUrl);
     }
   }
 
