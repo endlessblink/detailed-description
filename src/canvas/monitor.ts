@@ -52,9 +52,7 @@ export class CanvasMonitor {
 			for (const node of canvasData.nodes) {
 				if (node.type === 'text' && 'text' in node) {
 					const text = (node as unknown as { text: string }).text.trim();
-					const valid = isValidUrl(text);
-					console.debug('[DetailedCanvas] Text node:', node.id, 'text:', JSON.stringify(text).substring(0, 100), 'isValidUrl:', valid);
-					if (valid) {
+					if (isValidUrl(text)) {
 						linkNodes.push({
 							id: node.id,
 							type: 'link',
@@ -68,13 +66,10 @@ export class CanvasMonitor {
 				}
 			}
 
-			console.debug('[DetailedCanvas] Monitor:', canvasPath, '| links:', linkNodes.length, '| firstScan:', isFirstScan, '| prevSeen:', previouslySeen.size);
-
 			for (const node of linkNodes) {
 				currentNodes.add(node.id);
 
 				if (!isFirstScan && !previouslySeen.has(node.id)) {
-					console.debug('[DetailedCanvas] New node detected:', node.id, 'url' in node ? (node as CanvasLinkData).url : '');
 					this.onNewLinkNode(file, node);
 				}
 			}

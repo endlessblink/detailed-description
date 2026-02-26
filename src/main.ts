@@ -178,7 +178,9 @@ export default class DetailedCanvasPlugin extends Plugin {
       // Step 3: Build enriched card text
       const title = metadata.title || new URL(node.url).hostname;
       const desc = aiDescription.substring(0, this.settings.maxDescriptionLength);
-      const cardText = `## [${title}](${node.url})\n\n${desc}\n\n*${metadata.siteName || new URL(node.url).hostname}*`;
+      const siteName = metadata.siteName || new URL(node.url).hostname;
+      const imageLine = metadata.ogImage ? `![](${metadata.ogImage})\n\n` : '';
+      const cardText = `${imageLine}## [${title}](${node.url})\n\n${desc}\n\n*${siteName}*`;
 
       // Step 4: Update the text node directly on the canvas
       const updated = this.updateCanvasNodeText(node.id, cardText);
