@@ -1,9 +1,9 @@
 {
   "id": "detailed-canvas",
   "name": "Detailed Canvas",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minAppVersion": "1.4.0",
-  "description": "Enrich canvas link cards with AI-generated descriptions using Ollama.",
+  "description": "Enrich canvas link cards with AI-generated descriptions. Supports Ollama, OpenAI, Claude, Groq, and OpenRouter.",
   "author": "endlessblink",
   "authorUrl": "https://github.com/endlessblink",
   "isDesktopOnly": false
