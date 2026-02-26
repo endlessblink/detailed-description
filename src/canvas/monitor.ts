@@ -1,5 +1,6 @@
 import { App, TFile, EventRef } from 'obsidian';
 import { CanvasData, CanvasLinkData } from '../types';
+import { isValidUrl } from './utils';
 
 export class CanvasMonitor {
 	private seenNodes: Map<string, Set<string>> = new Map(); // canvasPath -> nodeIds
@@ -42,10 +43,29 @@ export class CanvasMonitor {
 			const previouslySeen = this.seenNodes.get(canvasPath) || new Set<string>();
 			const currentNodes = new Set<string>();
 
-			// Find all link nodes
+			// Find native link nodes
 			const linkNodes = canvasData.nodes.filter(
 				(node): node is CanvasLinkData => node.type === 'link'
 			);
+
+			// Also find text nodes that contain just a URL (from Ctrl+V paste)
+			for (const node of canvasData.nodes) {
+				if (node.type === 'text' && 'text' in node) {
+					const text = (node as unknown as { text: string }).text.trim();
+					if (isValidUrl(text)) {
+						// Treat as a link node for enrichment purposes
+						linkNodes.push({
+							id: node.id,
+							type: 'link',
+							url: text,
+							x: node.x,
+							y: node.y,
+							width: node.width,
+							height: node.height,
+						});
+					}
+				}
+			}
 
 			for (const node of linkNodes) {
 				currentNodes.add(node.id);

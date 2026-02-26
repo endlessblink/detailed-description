@@ -1,5 +1,6 @@
 import { App, TFile } from 'obsidian';
 import { CanvasData, CanvasLinkData, CanvasFileData } from '../types';
+import { isValidUrl } from './utils';
 
 export class CanvasTransformer {
 	constructor(private app: App) {}
@@ -24,8 +25,8 @@ export class CanvasTransformer {
 				}
 
 				const linkNode = canvasData.nodes[nodeIndex];
-				if (linkNode.type !== 'link') {
-					console.warn(`Node ${linkNodeId} is not a link node`);
+				if (linkNode.type !== 'link' && linkNode.type !== 'text') {
+					console.warn(`Node ${linkNodeId} is not a link or text node`);
 					return content; // Return unchanged
 				}
 
@@ -64,9 +65,29 @@ export class CanvasTransformer {
 			const content = await this.app.vault.read(canvasFile);
 			const canvasData: CanvasData = JSON.parse(content);
 
-			return canvasData.nodes.filter(
+			const linkNodes = canvasData.nodes.filter(
 				(node): node is CanvasLinkData => node.type === 'link'
 			);
+
+			// Also include text nodes that are just URLs
+			for (const node of canvasData.nodes) {
+				if (node.type === 'text' && 'text' in node) {
+					const text = (node as unknown as { text: string }).text.trim();
+					if (isValidUrl(text)) {
+						linkNodes.push({
+							id: node.id,
+							type: 'link',
+							url: text,
+							x: node.x,
+							y: node.y,
+							width: node.width,
+							height: node.height,
+						});
+					}
+				}
+			}
+
+			return linkNodes;
 		} catch (error) {
 			console.error('Error getting link nodes:', error);
 			return [];
