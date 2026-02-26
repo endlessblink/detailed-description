@@ -7,6 +7,25 @@ export interface DetailedCanvasSettings {
   descriptionPrompt: string;
   maxDescriptionLength: number;
   showNotifications: boolean;
+  aiProvider: AIProviderType;
+  openaiApiKey: string;
+  openaiModel: string;
+  openaiBaseUrl: string;
+  openrouterApiKey: string;
+  openrouterModel: string;
+  groqApiKey: string;
+  groqModel: string;
+  claudeApiKey: string;
+  claudeModel: string;
+  useEnvVariables: boolean;
+}
+
+export type AIProviderType = 'ollama' | 'openai' | 'openrouter' | 'groq' | 'claude';
+
+export interface AIProvider {
+  generate(prompt: string, context: string): Promise<string>;
+  checkConnection(): Promise<boolean>;
+  getModels(): Promise<string[]>;
 }
 
 // URL Metadata from scraping
@@ -36,6 +55,47 @@ export interface OllamaGenerateResponse {
   response: string;
   done: boolean;
   total_duration?: number;
+}
+
+export interface OpenAIChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface OpenAIChatRequest {
+  model: string;
+  messages: OpenAIChatMessage[];
+  max_tokens?: number;
+  temperature?: number;
+}
+
+export interface OpenAIChatResponse {
+  id: string;
+  choices: Array<{
+    message: {
+      role: string;
+      content: string;
+    };
+    finish_reason: string;
+  }>;
+}
+
+export interface ClaudeMessageRequest {
+  model: string;
+  max_tokens: number;
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+  }>;
+}
+
+export interface ClaudeMessageResponse {
+  id: string;
+  content: Array<{
+    type: string;
+    text: string;
+  }>;
+  stop_reason: string;
 }
 
 // Canvas node types

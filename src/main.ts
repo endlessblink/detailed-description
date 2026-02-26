@@ -1,8 +1,8 @@
 import { Plugin, TFile, Notice, Menu, ItemView } from 'obsidian';
-import { DetailedCanvasSettings, CanvasLinkData, EnrichmentResult, CanvasNodeInstance } from './types';
+import { DetailedCanvasSettings, AIProvider, CanvasLinkData, EnrichmentResult, CanvasNodeInstance } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { DetailedCanvasSettingTab } from './settings';
-import { OllamaClient } from './services/ollama';
+import { createProvider } from './services/provider-factory';
 import { ScraperService } from './services/scraper';
 import { NoteGeneratorService } from './services/note-generator';
 import { CanvasMonitor } from './canvas/monitor';
@@ -19,7 +19,7 @@ declare module 'obsidian' {
 export default class DetailedCanvasPlugin extends Plugin {
   settings!: DetailedCanvasSettings;
 
-  private ollamaClient!: OllamaClient;
+  private aiProvider!: AIProvider;
   private scraperService!: ScraperService;
   private noteGenerator!: NoteGeneratorService;
   private canvasMonitor!: CanvasMonitor;
@@ -31,10 +31,7 @@ export default class DetailedCanvasPlugin extends Plugin {
     await this.loadSettings();
 
     // Initialize services
-    this.ollamaClient = new OllamaClient(
-      this.settings.ollamaEndpoint,
-      this.settings.ollamaModel
-    );
+    this.aiProvider = createProvider(this.settings);
     this.scraperService = new ScraperService();
     this.noteGenerator = new NoteGeneratorService(this.app);
     this.canvasTransformer = new CanvasTransformer(this.app);
@@ -119,10 +116,7 @@ export default class DetailedCanvasPlugin extends Plugin {
     await this.saveData(this.settings);
 
     // Update services with new settings
-    this.ollamaClient = new OllamaClient(
-      this.settings.ollamaEndpoint,
-      this.settings.ollamaModel
-    );
+    this.aiProvider = createProvider(this.settings);
 
     // Toggle canvas monitoring based on settings
     if (this.settings.autoEnrichOnPaste) {
@@ -165,12 +159,12 @@ export default class DetailedCanvasPlugin extends Plugin {
       // Step 2: Generate AI description
       let aiDescription = '';
       try {
-        aiDescription = await this.ollamaClient.generate(
+        aiDescription = await this.aiProvider.generate(
           this.settings.descriptionPrompt,
           metadata.textContent
         );
       } catch (err) {
-        console.warn('Ollama generation failed, using metadata description:', err);
+        console.warn('AI generation failed, using metadata description:', err);
         aiDescription = metadata.description || 'No description available.';
       }
 

@@ -1,5 +1,5 @@
 import { requestUrl } from 'obsidian';
-import { OllamaGenerateRequest, OllamaGenerateResponse } from '../types';
+import { AIProvider, OllamaGenerateRequest, OllamaGenerateResponse } from '../types';
 import { OLLAMA_GENERATE_ENDPOINT, OLLAMA_TAGS_ENDPOINT } from '../constants';
 
 /**
@@ -17,7 +17,7 @@ interface OllamaTagsResponse {
 /**
  * Client for interacting with Ollama API
  */
-export class OllamaClient {
+export class OllamaClient implements AIProvider {
   constructor(
     private endpoint: string,
     private model: string
