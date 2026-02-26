@@ -188,6 +188,9 @@ export default class DetailedCanvasPlugin extends Plugin {
         throw new Error('Failed to update canvas');
       }
 
+      // Step 5: Refresh the canvas view to show the change
+      this.refreshCanvasView(canvasFile);
+
       if (this.settings.showNotifications) {
         new Notice(`Enriched: ${metadata.title || node.url}`);
       }
@@ -238,6 +241,33 @@ export default class DetailedCanvasPlugin extends Plugin {
     }
 
     new Notice('Finished enriching all link cards');
+  }
+
+  // Force the canvas view to reload data from the file
+  private refreshCanvasView(canvasFile: TFile): void {
+    try {
+      const view = this.getActiveCanvasView();
+      if (!view || !('canvas' in view)) return;
+
+      // Check that we're looking at the right canvas
+      if ('file' in view && view.file instanceof TFile && view.file.path !== canvasFile.path) return;
+
+      const canvas = view as ItemView & { canvas?: { requestFrame?: () => void; setData?: (data: unknown) => void; data?: unknown } };
+      if (!canvas.canvas) return;
+
+      // Read the updated file and set the canvas data
+      void this.app.vault.read(canvasFile).then((content) => {
+        const data: unknown = JSON.parse(content);
+        if (canvas.canvas?.setData) {
+          canvas.canvas.setData(data);
+        }
+        if (canvas.canvas?.requestFrame) {
+          canvas.canvas.requestFrame();
+        }
+      });
+    } catch {
+      // Canvas refresh is best-effort
+    }
   }
 
   // Helper: Get active canvas view
