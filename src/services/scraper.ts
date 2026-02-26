@@ -31,7 +31,8 @@ export class ScraperService {
       // Extract metadata
       const title = this.extractTitle(doc);
       const description = this.extractDescription(doc);
-      const ogImage = this.extractImage(doc, baseUrl);
+      const ogImageCandidate = this.extractImage(doc, baseUrl);
+      const ogImage = ogImageCandidate ? await this.validateImageUrl(ogImageCandidate) : null;
       const siteName = this.extractMeta(doc, 'og:site_name');
       const favicon = this.extractFavicon(doc, baseUrl);
       const textContent = this.extractTextContent(doc);
@@ -222,6 +223,22 @@ export class ScraperService {
     } catch (error) {
       console.warn('Error resolving URL:', error);
       return relative;
+    }
+  }
+
+  /**
+   * Validate that an image URL is accessible (HEAD request)
+   */
+  private async validateImageUrl(imageUrl: string): Promise<string | null> {
+    try {
+      const response = await requestUrl({
+        url: imageUrl,
+        method: 'HEAD',
+        throw: false,
+      });
+      return response.status === 200 ? imageUrl : null;
+    } catch {
+      return null;
     }
   }
 
