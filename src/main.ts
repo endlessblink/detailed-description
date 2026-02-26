@@ -4,9 +4,7 @@ import { DEFAULT_SETTINGS } from './constants';
 import { DetailedCanvasSettingTab } from './settings';
 import { createProvider } from './services/provider-factory';
 import { ScraperService } from './services/scraper';
-import { NoteGeneratorService } from './services/note-generator';
 import { CanvasMonitor } from './canvas/monitor';
-import { CanvasTransformer } from './canvas/transformer';
 import { isValidUrl } from './canvas/utils';
 
 // Module augmentation for internal canvas events
@@ -21,10 +19,7 @@ export default class DetailedCanvasPlugin extends Plugin {
 
   private aiProvider!: AIProvider;
   private scraperService!: ScraperService;
-  private noteGenerator!: NoteGeneratorService;
   private canvasMonitor!: CanvasMonitor;
-  private canvasTransformer!: CanvasTransformer;
-
   private processingNodes: Set<string> = new Set(); // Prevent duplicate processing
 
   async onload() {
@@ -35,8 +30,6 @@ export default class DetailedCanvasPlugin extends Plugin {
     // Initialize services
     this.aiProvider = createProvider(this.settings);
     this.scraperService = new ScraperService();
-    this.noteGenerator = new NoteGeneratorService(this.app);
-    this.canvasTransformer = new CanvasTransformer(this.app);
 
     // Initialize canvas monitor
     this.canvasMonitor = new CanvasMonitor(
@@ -86,7 +79,9 @@ export default class DetailedCanvasPlugin extends Plugin {
     this.registerEvent(
       this.app.workspace.on('canvas:node-menu', (menu: Menu, node: CanvasNodeInstance) => {
         const nodeData = node.getData?.();
-        if (nodeData && nodeData.type === 'link' && typeof nodeData.url === 'string' && isValidUrl(nodeData.url)) {
+        const isLinkNode = nodeData && nodeData.type === 'link' && typeof nodeData.url === 'string' && isValidUrl(nodeData.url);
+        const isTextNodeWithUrl = nodeData && nodeData.type === 'text' && 'text' in nodeData && typeof (nodeData as unknown as { text: string }).text === 'string' && isValidUrl((nodeData as unknown as { text: string }).text.trim());
+        if (isLinkNode || isTextNodeWithUrl) {
           menu.addItem((item) => {
             item
               .setTitle('Enrich with AI description')
@@ -94,7 +89,17 @@ export default class DetailedCanvasPlugin extends Plugin {
               .onClick(() => {
                 const canvasFile = this.getActiveCanvasFile();
                 if (canvasFile) {
-                  void this.enrichLinkNode(canvasFile, nodeData as unknown as CanvasLinkData);
+                  let linkData: CanvasLinkData;
+                  if (nodeData.type === 'link') {
+                    linkData = nodeData as unknown as CanvasLinkData;
+                  } else {
+                    const textData = nodeData as unknown as { id: string; text: string; x: number; y: number; width: number; height: number };
+                    linkData = {
+                      id: textData.id, type: 'link', url: textData.text.trim(),
+                      x: textData.x, y: textData.y, width: textData.width, height: textData.height,
+                    } as CanvasLinkData;
+                  }
+                  void this.enrichLinkNode(canvasFile, linkData);
                 }
               });
           });
@@ -170,32 +175,23 @@ export default class DetailedCanvasPlugin extends Plugin {
         aiDescription = metadata.description || 'No description available.';
       }
 
-      // Step 3: Create the note
-      const noteFile = await this.noteGenerator.createEnrichedNote(
-        metadata,
-        aiDescription,
-        this.settings.notesFolder
-      );
+      // Step 3: Build enriched card text
+      const title = metadata.title || new URL(node.url).hostname;
+      const desc = aiDescription.substring(0, this.settings.maxDescriptionLength);
+      const cardText = `## [${title}](${node.url})\n\n${desc}\n\n*${metadata.siteName || new URL(node.url).hostname}*`;
 
-      // Step 4: Replace link node with file node
-      const success = await this.canvasTransformer.replaceLinkWithFile(
-        canvasFile,
-        node.id,
-        noteFile.path
-      );
+      // Step 4: Update the text node directly on the canvas
+      const updated = this.updateCanvasNodeText(node.id, cardText);
 
-      if (!success) {
-        throw new Error('Failed to update canvas');
+      if (!updated) {
+        throw new Error('Failed to update canvas node');
       }
-
-      // Step 5: Refresh the canvas view to show the change
-      this.refreshCanvasView(canvasFile);
 
       if (this.settings.showNotifications) {
-        new Notice(`Enriched: ${metadata.title || node.url}`);
+        new Notice(`Enriched: ${title}`);
       }
 
-      return { success: true, notePath: noteFile.path };
+      return { success: true };
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -209,6 +205,36 @@ export default class DetailedCanvasPlugin extends Plugin {
 
     } finally {
       this.processingNodes.delete(nodeKey);
+    }
+  }
+
+  // Update a canvas node's text content directly through the internal API
+  private updateCanvasNodeText(nodeId: string, newText: string): boolean {
+    try {
+      const view = this.getActiveCanvasView();
+      if (!view || !('canvas' in view)) return false;
+
+      type CanvasInternal = {
+        nodes: Map<string, { setText?: (text: string) => void; requestSave?: () => void }>;
+        requestSave?: () => void;
+      };
+
+      const canvas = (view as ItemView & { canvas: CanvasInternal }).canvas;
+      if (!canvas?.nodes) return false;
+
+      const canvasNode = canvas.nodes.get(nodeId);
+      if (!canvasNode) return false;
+
+      if (canvasNode.setText) {
+        canvasNode.setText(newText);
+      }
+      if (canvas.requestSave) {
+        canvas.requestSave();
+      }
+
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -226,8 +252,39 @@ export default class DetailedCanvasPlugin extends Plugin {
 
   // Enrich all link nodes in canvas
   private async enrichAllLinksInCanvas(canvasFile: TFile) {
-    const linkNodes = await this.canvasTransformer.getLinkNodes(canvasFile);
-    const validLinks = linkNodes.filter(n => isValidUrl(n.url));
+    const view = this.getActiveCanvasView();
+    if (!view || !('canvas' in view)) {
+      new Notice('No active canvas view');
+      return;
+    }
+
+    type CanvasNodeInternal = {
+      getData?: () => { id: string; type: string; url?: string; text?: string; x: number; y: number; width: number; height: number };
+    };
+    type CanvasInternal = {
+      nodes: Map<string, CanvasNodeInternal>;
+    };
+
+    const canvas = (view as ItemView & { canvas: CanvasInternal }).canvas;
+    if (!canvas?.nodes) {
+      new Notice('No canvas nodes found');
+      return;
+    }
+
+    const validLinks: CanvasLinkData[] = [];
+    for (const [, node] of canvas.nodes) {
+      const data = node.getData?.();
+      if (!data) continue;
+
+      if (data.type === 'link' && typeof data.url === 'string' && isValidUrl(data.url)) {
+        validLinks.push(data as unknown as CanvasLinkData);
+      } else if (data.type === 'text' && typeof data.text === 'string' && isValidUrl(data.text.trim())) {
+        validLinks.push({
+          id: data.id, type: 'link', url: data.text.trim(),
+          x: data.x, y: data.y, width: data.width, height: data.height,
+        } as CanvasLinkData);
+      }
+    }
 
     if (validLinks.length === 0) {
       new Notice('No link cards found in canvas');
@@ -241,33 +298,6 @@ export default class DetailedCanvasPlugin extends Plugin {
     }
 
     new Notice('Finished enriching all link cards');
-  }
-
-  // Force the canvas view to reload data from the file
-  private refreshCanvasView(canvasFile: TFile): void {
-    try {
-      const view = this.getActiveCanvasView();
-      if (!view || !('canvas' in view)) return;
-
-      // Check that we're looking at the right canvas
-      if ('file' in view && view.file instanceof TFile && view.file.path !== canvasFile.path) return;
-
-      const canvas = view as ItemView & { canvas?: { requestFrame?: () => void; setData?: (data: unknown) => void; data?: unknown } };
-      if (!canvas.canvas) return;
-
-      // Read the updated file and set the canvas data
-      void this.app.vault.read(canvasFile).then((content) => {
-        const data: unknown = JSON.parse(content);
-        if (canvas.canvas?.setData) {
-          canvas.canvas.setData(data);
-        }
-        if (canvas.canvas?.requestFrame) {
-          canvas.canvas.requestFrame();
-        }
-      });
-    } catch {
-      // Canvas refresh is best-effort
-    }
   }
 
   // Helper: Get active canvas view
@@ -299,8 +329,16 @@ export default class DetailedCanvasPlugin extends Plugin {
       const selected: CanvasLinkData[] = [];
       for (const node of canvas.selection) {
         const data = node.getData?.();
-        if (data && data.type === 'link' && typeof data.url === 'string' && isValidUrl(data.url)) {
+        if (!data) continue;
+
+        if (data.type === 'link' && typeof data.url === 'string' && isValidUrl(data.url)) {
           selected.push(data as unknown as CanvasLinkData);
+        } else if (data.type === 'text' && 'text' in data && typeof (data as unknown as { text: string }).text === 'string' && isValidUrl((data as unknown as { text: string }).text.trim())) {
+          const textData = data as unknown as { id: string; text: string; x: number; y: number; width: number; height: number };
+          selected.push({
+            id: textData.id, type: 'link', url: textData.text.trim(),
+            x: textData.x, y: textData.y, width: textData.width, height: textData.height,
+          } as CanvasLinkData);
         }
       }
       return selected;
