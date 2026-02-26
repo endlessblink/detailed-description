@@ -28,7 +28,9 @@ export default class DetailedCanvasPlugin extends Plugin {
   private processingNodes: Set<string> = new Set(); // Prevent duplicate processing
 
   async onload() {
+    console.log('[DetailedCanvas] Plugin loading, version:', this.manifest.version);
     await this.loadSettings();
+    console.log('[DetailedCanvas] Provider:', this.settings.aiProvider, '| Auto-enrich:', this.settings.autoEnrichOnPaste);
 
     // Initialize services
     this.aiProvider = createProvider(this.settings);
