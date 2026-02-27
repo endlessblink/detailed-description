@@ -92,10 +92,18 @@ export class ScraperService {
         return this.createEmptyMetadata(originalUrl);
       }
 
-      // Extract first photo as OG image
+      // Extract best available image: photo > video thumbnail > external card > avatar
       let ogImage: string | null = null;
       if (tweet.media?.photos?.length > 0) {
         ogImage = tweet.media.photos[0].url ?? null;
+      } else if (tweet.media?.videos?.length > 0) {
+        ogImage = tweet.media.videos[0].thumbnail_url ?? null;
+      } else if (tweet.media?.external?.thumbnail_url) {
+        ogImage = tweet.media.external.thumbnail_url;
+      }
+      // Fall back to author avatar if no media images
+      if (!ogImage && tweet.author?.avatar_url) {
+        ogImage = tweet.author.avatar_url;
       }
 
       // Validate image accessibility
