@@ -114,7 +114,7 @@ export class DetailedCanvasSettingTab extends PluginSettingTab {
     // Environment variables toggle
     new Setting(containerEl)
       .setName('Use environment variables')
-      .setDesc('Read API keys from environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY). Stored keys are used as fallback.')
+      .setDesc('Read API keys from environment variables instead of stored values. See the plugin documentation for variable names.')
       .addToggle(toggle => toggle
         .setValue(this.plugin.settings.useEnvVariables)
         .onChange(async (value) => {
@@ -233,7 +233,7 @@ export class DetailedCanvasSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Custom base URL')
-      .setDesc('Optional: override the API base URL (for Azure OpenAI or compatible APIs)')
+      .setDesc('Override the default API endpoint for compatible services')
       .addText(text => text
         .setPlaceholder('https://api.openai.com/v1')
         .setValue(this.plugin.settings.openaiBaseUrl)
