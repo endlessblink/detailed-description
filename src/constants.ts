@@ -10,7 +10,7 @@ export const CLAUDE_BASE_URL = 'https://api.anthropic.com/v1';
 export const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 export const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-4o-mini';
 export const DEFAULT_GROQ_MODEL = 'llama-3.1-8b-instant';
-export const DEFAULT_CLAUDE_MODEL = 'claude-3-haiku-20240307';
+export const DEFAULT_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 
 // Environment variable names
 export const ENV_OPENAI_API_KEY = 'OPENAI_API_KEY';
@@ -20,11 +20,10 @@ export const ENV_ANTHROPIC_API_KEY = 'ANTHROPIC_API_KEY';
 
 // Claude available models (hardcoded - no list-models API)
 export const CLAUDE_MODELS = [
-  'claude-3-haiku-20240307',
-  'claude-3-5-haiku-20241022',
-  'claude-3-5-sonnet-20241022',
-  'claude-3-5-sonnet-20240620',
+  'claude-haiku-4-5-20251001',
+  'claude-sonnet-4-6-20250417',
   'claude-sonnet-4-20250514',
+  'claude-3-5-haiku-20241022',
 ];
 
 // Ollama endpoints

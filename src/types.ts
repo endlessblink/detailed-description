@@ -113,18 +113,12 @@ export interface CanvasLinkData extends CanvasNodeData {
   url: string;
 }
 
-export interface CanvasFileData extends CanvasNodeData {
-  type: "file";
-  file: string;
-  subpath?: string;
-}
-
 export interface CanvasTextData extends CanvasNodeData {
   type: "text";
   text: string;
 }
 
-export type CanvasNode = CanvasLinkData | CanvasFileData | CanvasTextData;
+export type CanvasNode = CanvasLinkData | CanvasTextData;
 
 export interface CanvasEdgeData {
   id: string;
