@@ -92,6 +92,47 @@ export class DetailedCanvasSettingTab extends PluginSettingTab {
           }
         }));
 
+    // Organization section
+    new Setting(containerEl).setName('Organization').setHeading();
+
+    new Setting(containerEl)
+      .setName('Organization prompt')
+      .setDesc('Instructions for the AI when classifying canvas nodes into groups.')
+      .addTextArea(text => {
+        text
+          .setPlaceholder('Classify items into logical groups...')
+          .setValue(this.plugin.settings.organizePrompt)
+          .onChange(async (value) => {
+            this.plugin.settings.organizePrompt = value || DEFAULT_SETTINGS.organizePrompt;
+            await this.plugin.saveSettings();
+          });
+        text.inputEl.rows = 4;
+        text.inputEl.cols = 50;
+        return text;
+      });
+
+    new Setting(containerEl)
+      .setName('Max categories')
+      .setDesc('Maximum number of groups to create (2-8)')
+      .addSlider(slider => slider
+        .setLimits(2, 8, 1)
+        .setValue(this.plugin.settings.maxCategories)
+        .setDynamicTooltip()
+        .onChange(async (value) => {
+          this.plugin.settings.maxCategories = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Color groups by importance')
+      .setDesc('Use Obsidian color presets to visually distinguish groups')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.colorGroupsByImportance)
+        .onChange(async (value) => {
+          this.plugin.settings.colorGroupsByImportance = value;
+          await this.plugin.saveSettings();
+        }));
+
     // Advanced section
     new Setting(containerEl).setName('Advanced').setHeading();
 

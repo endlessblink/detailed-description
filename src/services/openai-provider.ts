@@ -1,5 +1,5 @@
 import { requestUrl } from 'obsidian';
-import { AIProvider, OpenAIChatRequest, OpenAIChatResponse } from '../types.js';
+import { AIProvider, AIGenerateOptions, OpenAIChatResponse } from '../types.js';
 
 export class OpenAICompatibleProvider implements AIProvider {
   constructor(
@@ -9,19 +9,23 @@ export class OpenAICompatibleProvider implements AIProvider {
     private extraHeaders: Record<string, string> = {}
   ) {}
 
-  async generate(prompt: string, context: string): Promise<string> {
+  async generate(prompt: string, context: string, options?: AIGenerateOptions): Promise<string> {
     const fullPrompt = context
       ? `Context:\n${context}\n\n${prompt}`
       : prompt;
 
-    const request: OpenAIChatRequest = {
+    const request: Record<string, unknown> = {
       model: this.model,
       messages: [
         { role: 'user', content: fullPrompt }
       ],
-      max_tokens: 500,
+      max_tokens: options?.maxTokens ?? 500,
       temperature: 0.7,
     };
+
+    if (options?.jsonMode) {
+      request.response_format = { type: 'json_object' };
+    }
 
     const response = await requestUrl({
       url: `${this.baseUrl}/chat/completions`,

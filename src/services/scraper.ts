@@ -4,6 +4,7 @@ import { UrlMetadata } from '../types';
 export class ScraperService {
   private static readonly TWITTER_HOSTS = ['twitter.com', 'www.twitter.com', 'x.com', 'www.x.com'];
   private static readonly TWITTER_STATUS_RE = /\/([^/]+)\/status\/(\d+)/;
+  private static readonly REDDIT_HOSTS = ['reddit.com', 'www.reddit.com', 'old.reddit.com', 'new.reddit.com'];
 
   /**
    * Scrape metadata and content from a URL
@@ -16,6 +17,11 @@ export class ScraperService {
       const host = new URL(url).hostname.toLowerCase();
       if (ScraperService.TWITTER_HOSTS.includes(host)) {
         return await this.scrapeTwitter(url);
+      }
+
+      // Use Reddit JSON API for Reddit URLs
+      if (ScraperService.REDDIT_HOSTS.includes(host)) {
+        return await this.scrapeReddit(url);
       }
 
       // Fetch URL using Obsidian's requestUrl API (bypasses CORS)
@@ -122,6 +128,88 @@ export class ScraperService {
       };
     } catch (error) {
       console.warn(`fxtwitter scrape failed for ${originalUrl}:`, error);
+      return this.createEmptyMetadata(originalUrl);
+    }
+  }
+
+  /**
+   * Scrape Reddit URLs via their JSON API (append .json to the URL)
+   */
+  private async scrapeReddit(originalUrl: string): Promise<UrlMetadata> {
+    try {
+      // Clean URL: strip query params (share_id, utm_* etc cause redirects) and append .json
+      const urlObj = new URL(originalUrl);
+      let cleanPath = urlObj.pathname;
+      // Remove trailing slash for consistency, then add .json
+      cleanPath = cleanPath.replace(/\/+$/, '');
+      const jsonUrl = `https://www.reddit.com${cleanPath}.json`;
+
+      const response = await requestUrl({
+        url: jsonUrl,
+        method: 'GET',
+        headers: {
+          'User-Agent': 'DetailedCanvas-ObsidianPlugin/1.0',
+          'Accept': 'application/json',
+        },
+        throw: false,
+      });
+
+      if (response.status !== 200) {
+        console.warn(`Reddit JSON API returned ${response.status} for ${originalUrl}`);
+        return this.createEmptyMetadata(originalUrl);
+      }
+
+      // Verify we got JSON, not HTML (Reddit sometimes returns login pages)
+      const contentType = response.headers?.['content-type'] ?? '';
+      if (contentType.includes('text/html') || response.text.trimStart().startsWith('<!')) {
+        console.warn(`Reddit returned HTML instead of JSON for ${originalUrl}`);
+        return this.createEmptyMetadata(originalUrl);
+      }
+
+      let data;
+      try {
+        data = response.json;
+      } catch {
+        console.warn(`Reddit returned invalid JSON for ${originalUrl}`);
+        return this.createEmptyMetadata(originalUrl);
+      }
+      // Reddit returns an array: [0] = post, [1] = comments
+      const postData = data?.[0]?.data?.children?.[0]?.data;
+      if (!postData) {
+        return this.createEmptyMetadata(originalUrl);
+      }
+
+      const title = postData.title ?? null;
+      const selftext = postData.selftext ?? '';
+      const subreddit = postData.subreddit_name_prefixed ?? 'Reddit';
+      let ogImage: string | null = null;
+
+      // Try to get thumbnail or preview image
+      if (postData.preview?.images?.[0]?.source?.url) {
+        ogImage = postData.preview.images[0].source.url.replace(/&amp;/g, '&');
+      } else if (postData.thumbnail && postData.thumbnail !== 'self' && postData.thumbnail !== 'default' && postData.thumbnail !== 'nsfw') {
+        ogImage = postData.thumbnail;
+      }
+
+      if (ogImage) {
+        ogImage = await this.validateImageUrl(ogImage);
+      }
+
+      const description = selftext
+        ? selftext.substring(0, 500)
+        : postData.link_flair_text ?? null;
+
+      return {
+        url: originalUrl,
+        title,
+        description,
+        ogImage,
+        siteName: subreddit,
+        favicon: null,
+        textContent: selftext || title || '',
+      };
+    } catch (error) {
+      console.warn(`Reddit scrape failed for ${originalUrl}:`, error);
       return this.createEmptyMetadata(originalUrl);
     }
   }

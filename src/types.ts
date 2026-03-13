@@ -18,12 +18,20 @@ export interface DetailedCanvasSettings {
   claudeApiKey: string;
   claudeModel: string;
   useEnvVariables: boolean;
+  organizePrompt: string;
+  maxCategories: number;
+  colorGroupsByImportance: boolean;
 }
 
 export type AIProviderType = 'ollama' | 'openai' | 'openrouter' | 'groq' | 'claude';
 
+export interface AIGenerateOptions {
+  maxTokens?: number;
+  jsonMode?: boolean;
+}
+
 export interface AIProvider {
-  generate(prompt: string, context: string): Promise<string>;
+  generate(prompt: string, context: string, options?: AIGenerateOptions): Promise<string>;
   checkConnection(): Promise<boolean>;
   getModels(): Promise<string[]>;
 }
@@ -118,7 +126,21 @@ export interface CanvasTextData extends CanvasNodeData {
   text: string;
 }
 
-export type CanvasNode = CanvasLinkData | CanvasTextData;
+export interface CanvasFileData extends CanvasNodeData {
+  type: 'file';
+  file: string;
+  subpath?: string;
+}
+
+export interface CanvasGroupData extends CanvasNodeData {
+  type: 'group';
+  label?: string;
+  background?: string;
+  backgroundStyle?: 'cover' | 'ratio' | 'repeat';
+}
+
+export type AllCanvasNodeData = CanvasLinkData | CanvasTextData | CanvasFileData | CanvasGroupData;
+export type CanvasNode = AllCanvasNodeData;
 
 export interface CanvasEdgeData {
   id: string;
@@ -131,8 +153,26 @@ export interface CanvasEdgeData {
 }
 
 export interface CanvasData {
-  nodes: CanvasNode[];
+  nodes: AllCanvasNodeData[];
   edges: CanvasEdgeData[];
+}
+
+// LLM classification types for canvas organization
+export interface LLMMember {
+  node_id: string;
+  importance_score: number;
+}
+
+export interface LLMCategory {
+  id: string;
+  label: string;
+  group_color: string;
+  importance_score: number;
+  members: LLMMember[];
+}
+
+export interface LLMClassificationResponse {
+  categories: LLMCategory[];
 }
 
 // Enrichment result

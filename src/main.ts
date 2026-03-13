@@ -6,6 +6,7 @@ import { createProvider } from './services/provider-factory';
 import { ScraperService } from './services/scraper';
 import { CanvasMonitor } from './canvas/monitor';
 import { isValidUrl } from './canvas/utils';
+import { organizeCanvas } from './canvas/organizer';
 
 // Module augmentation for internal canvas events
 declare module 'obsidian' {
@@ -67,6 +68,21 @@ export default class DetailedCanvasPlugin extends Plugin {
 
         if (!checking) {
           void this.enrichAllLinksInCanvas(canvasFile);
+        }
+        return true;
+      }
+    });
+
+    this.addCommand({
+      id: 'organize-canvas',
+      name: 'Organize canvas nodes into groups',
+      checkCallback: (checking: boolean) => {
+        const canvasView = this.getActiveCanvasView();
+        const canvasFile = this.getActiveCanvasFile();
+        if (!canvasView || !canvasFile) return false;
+
+        if (!checking) {
+          void organizeCanvas(this.app, canvasFile, this.aiProvider, this.settings);
         }
         return true;
       }

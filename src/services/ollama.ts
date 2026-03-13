@@ -1,5 +1,5 @@
 import { requestUrl } from 'obsidian';
-import { AIProvider, OllamaGenerateRequest, OllamaGenerateResponse } from '../types';
+import { AIProvider, AIGenerateOptions, OllamaGenerateResponse } from '../types';
 import { OLLAMA_GENERATE_ENDPOINT, OLLAMA_TAGS_ENDPOINT } from '../constants';
 
 /**
@@ -30,21 +30,25 @@ export class OllamaClient implements AIProvider {
    * @returns The generated text response
    * @throws Error if the request fails or times out
    */
-  async generate(prompt: string, context: string): Promise<string> {
+  async generate(prompt: string, context: string, options?: AIGenerateOptions): Promise<string> {
     try {
       const fullPrompt = context
         ? `Context:\n${context}\n\n${prompt}`
         : prompt;
 
-      const request: OllamaGenerateRequest = {
+      const request: Record<string, unknown> = {
         model: this.model,
         prompt: fullPrompt,
         stream: false,
         options: {
           temperature: 0.7,
-          num_predict: 500,
+          num_predict: options?.maxTokens ?? 500,
         },
       };
+
+      if (options?.jsonMode) {
+        request.format = 'json';
+      }
 
       const response = await requestUrl({
         url: `${this.endpoint}${OLLAMA_GENERATE_ENDPOINT}`,

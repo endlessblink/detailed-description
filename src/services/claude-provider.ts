@@ -1,5 +1,5 @@
 import { requestUrl } from 'obsidian';
-import { AIProvider, ClaudeMessageRequest, ClaudeMessageResponse } from '../types.js';
+import { AIProvider, AIGenerateOptions, ClaudeMessageRequest, ClaudeMessageResponse } from '../types.js';
 import { CLAUDE_BASE_URL, CLAUDE_MODELS } from '../constants.js';
 
 export class ClaudeProvider implements AIProvider {
@@ -8,14 +8,14 @@ export class ClaudeProvider implements AIProvider {
     private model: string
   ) {}
 
-  async generate(prompt: string, context: string): Promise<string> {
+  async generate(prompt: string, context: string, options?: AIGenerateOptions): Promise<string> {
     const fullPrompt = context
       ? `Context:\n${context}\n\n${prompt}`
       : prompt;
 
     const request: ClaudeMessageRequest = {
       model: this.model,
-      max_tokens: 500,
+      max_tokens: options?.maxTokens ?? 500,
       messages: [
         { role: 'user', content: fullPrompt }
       ],

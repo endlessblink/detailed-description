@@ -34,6 +34,9 @@ export const OLLAMA_TAGS_ENDPOINT = '/api/tags';
 export const REQUEST_TIMEOUT = 30000; // 30 seconds
 export const AI_TIMEOUT = 60000; // 60 seconds for AI generation
 
+// Canvas organization defaults
+export const DEFAULT_ORGANIZE_PROMPT = 'You are an expert organizer. Classify the following canvas items into logical groups based on their topic, theme, or purpose. Assign importance scores based on how central each item is to the overall canvas content.';
+
 export const DEFAULT_SETTINGS: DetailedCanvasSettings = {
   ollamaEndpoint: 'http://localhost:11434',
   ollamaModel: 'llama3.2',
@@ -53,4 +56,7 @@ export const DEFAULT_SETTINGS: DetailedCanvasSettings = {
   claudeApiKey: '',
   claudeModel: DEFAULT_CLAUDE_MODEL,
   useEnvVariables: false,
+  organizePrompt: DEFAULT_ORGANIZE_PROMPT,
+  maxCategories: 6,
+  colorGroupsByImportance: true,
 };
