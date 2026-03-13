@@ -1,4 +1,4 @@
-import { Plugin, TFile, Notice, Menu, ItemView } from 'obsidian';
+import { Plugin, TFile, Notice, Menu, ItemView, requestUrl } from 'obsidian';
 import { DetailedCanvasSettings, AIProvider, CanvasLinkData, EnrichmentResult, CanvasNodeInstance } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { DetailedCanvasSettingTab } from './settings';
@@ -196,7 +196,21 @@ export default class DetailedCanvasPlugin extends Plugin {
       const title = metadata.title || new URL(node.url).hostname;
       const desc = aiDescription.substring(0, this.settings.maxDescriptionLength);
       const siteName = metadata.siteName || new URL(node.url).hostname;
-      const imageLine = metadata.ogImage ? `![](${metadata.ogImage})\n\n` : '';
+
+      // Download OG image locally to avoid broken remote images (429 rate limits etc.)
+      let imageLine = '';
+      if (metadata.ogImage) {
+        try {
+          const localImagePath = await this.downloadImage(metadata.ogImage, node.id);
+          if (localImagePath) {
+            imageLine = `![[${localImagePath}]]\n\n`;
+          }
+        } catch {
+          // Fallback to remote URL if download fails
+          imageLine = `![](${metadata.ogImage})\n\n`;
+        }
+      }
+
       const cardText = `${imageLine}## [${title}](${node.url})\n\n${desc}\n\n*${siteName}*`;
 
       // Step 4: Update the text node directly on the canvas
@@ -329,6 +343,49 @@ export default class DetailedCanvasPlugin extends Plugin {
     }
 
     new Notice('Finished enriching all link cards');
+  }
+
+  // Download an image from a URL and save it to the vault
+  private async downloadImage(imageUrl: string, nodeId: string): Promise<string | null> {
+    try {
+      const response = await requestUrl({
+        url: imageUrl,
+        method: 'GET',
+        throw: false,
+      });
+
+      if (response.status !== 200) return null;
+
+      // Determine file extension from content-type or URL
+      const contentType = response.headers?.['content-type'] ?? '';
+      let ext = 'png';
+      if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = 'jpg';
+      else if (contentType.includes('gif')) ext = 'gif';
+      else if (contentType.includes('webp')) ext = 'webp';
+      else if (contentType.includes('svg')) ext = 'svg';
+
+      // Save to the notes folder under an images subfolder
+      const imagesFolder = `${this.settings.notesFolder}/images`;
+      const fileName = `${nodeId}.${ext}`;
+      const filePath = `${imagesFolder}/${fileName}`;
+
+      // Ensure images folder exists
+      const folder = this.app.vault.getAbstractFileByPath(imagesFolder);
+      if (!folder) {
+        await this.app.vault.createFolder(imagesFolder);
+      }
+
+      // Write the binary data
+      const existingFile = this.app.vault.getAbstractFileByPath(filePath);
+      if (existingFile) {
+        return filePath;  // Already downloaded
+      }
+
+      await this.app.vault.createBinary(filePath, response.arrayBuffer);
+      return filePath;
+    } catch {
+      return null;
+    }
   }
 
   // Helper: Get active canvas view
