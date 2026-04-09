@@ -1,4 +1,4 @@
-import { App, TFile, EventRef } from 'obsidian';
+import { App, TFile, TFolder, EventRef } from 'obsidian';
 import { CanvasData, CanvasLinkData } from '../types';
 import { isValidUrl } from './utils';
 
@@ -9,7 +9,8 @@ export class CanvasMonitor {
 
 	constructor(
 		private app: App,
-		private onNewLinkNode: (file: TFile, node: CanvasLinkData) => void
+		private onNewLinkNode: (file: TFile, node: CanvasLinkData) => void,
+		public imagesFolder: string
 	) {}
 
 	startWatching(): void {
@@ -81,8 +82,45 @@ export class CanvasMonitor {
 			if (isFirstScan) {
 				this.initializedCanvases.add(canvasPath);
 			}
+
+			void this.cleanupOrphanedImages();
 		} catch (error) {
 			console.error('Error checking for new links in canvas:', error);
+		}
+	}
+
+	private async cleanupOrphanedImages(): Promise<void> {
+		try {
+			// Collect all node IDs from every canvas in the vault
+			const allNodeIds = new Set<string>();
+			const canvasFiles = this.app.vault.getFiles().filter(f => f.extension === 'canvas');
+
+			for (const canvasFile of canvasFiles) {
+				try {
+					const content = await this.app.vault.read(canvasFile);
+					const canvasData: CanvasData = JSON.parse(content);
+					for (const node of canvasData.nodes) {
+						allNodeIds.add(node.id);
+					}
+				} catch {
+					// Skip unreadable canvas files
+				}
+			}
+
+			// Check images folder for orphaned files
+			const folder = this.app.vault.getAbstractFileByPath(this.imagesFolder);
+			if (!(folder instanceof TFolder)) return;
+
+			for (const child of folder.children) {
+				if (!(child instanceof TFile)) continue;
+				const nodeId = child.basename;
+				if (!allNodeIds.has(nodeId)) {
+					console.log(`[DetailedCanvas] Deleting orphaned image: ${child.path}`);
+					await this.app.vault.trash(child, true);
+				}
+			}
+		} catch (error) {
+			console.error('Error during orphaned image cleanup:', error);
 		}
 	}
 

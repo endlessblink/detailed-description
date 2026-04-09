@@ -33,7 +33,8 @@ export default class DetailedCanvasPlugin extends Plugin {
     // Initialize canvas monitor
     this.canvasMonitor = new CanvasMonitor(
       this.app,
-      (file, node) => { void this.handleNewLinkNode(file, node); }
+      (file, node) => { void this.handleNewLinkNode(file, node); },
+      `${this.settings.notesFolder}/images`
     );
 
     // Start watching if auto-enrich is enabled
@@ -123,6 +124,55 @@ export default class DetailedCanvasPlugin extends Plugin {
 
     // Add settings tab
     this.addSettingTab(new DetailedCanvasSettingTab(this.app, this));
+
+    // Add ribbon icon with plugin action menu
+    this.addRibbonIcon('layout-grid', 'Detailed Canvas', (evt: MouseEvent) => {
+      const menu = new Menu();
+
+      const canvasView = this.getActiveCanvasView();
+      const canvasFile = this.getActiveCanvasFile();
+      const hasCanvas = !!canvasView && !!canvasFile;
+
+      menu.addItem((item) => {
+        item
+          .setTitle('Enrich selected cards')
+          .setIcon('sparkles')
+          .setDisabled(!hasCanvas)
+          .onClick(() => {
+            if (canvasView) {
+              void this.enrichSelectedLinks(canvasView);
+            }
+          });
+      });
+
+      menu.addItem((item) => {
+        item
+          .setTitle('Enrich all link cards')
+          .setIcon('sparkles')
+          .setDisabled(!hasCanvas)
+          .onClick(() => {
+            if (canvasFile) {
+              void this.enrichAllLinksInCanvas(canvasFile);
+            }
+          });
+      });
+
+      menu.addSeparator();
+
+      menu.addItem((item) => {
+        item
+          .setTitle('Organize canvas')
+          .setIcon('layout-grid')
+          .setDisabled(!hasCanvas)
+          .onClick(() => {
+            if (canvasFile) {
+              void organizeCanvas(this.app, canvasFile, this.aiProvider, this.settings);
+            }
+          });
+      });
+
+      menu.showAtMouseEvent(evt);
+    });
   }
 
   onunload() {
@@ -138,6 +188,11 @@ export default class DetailedCanvasPlugin extends Plugin {
 
     // Update services with new settings
     this.aiProvider = createProvider(this.settings);
+
+    // Keep images folder in sync with settings
+    if (this.canvasMonitor) {
+      this.canvasMonitor.imagesFolder = `${this.settings.notesFolder}/images`;
+    }
 
     // Toggle canvas monitoring based on settings
     if (this.settings.autoEnrichOnPaste) {
@@ -168,7 +223,7 @@ export default class DetailedCanvasPlugin extends Plugin {
 
     try {
       // Show placeholder text on the card while processing
-      await this.updateCanvasNodeTextWithRetry(node.id, `Loading...\n\n${node.url}`);
+      await this.updateCanvasNodeText(canvasFile, node.id, `Loading...\n\n${node.url}`);
 
       if (this.settings.showNotifications) {
         new Notice(`Enriching: ${node.url}`);
@@ -214,7 +269,7 @@ export default class DetailedCanvasPlugin extends Plugin {
       const cardText = `${imageLine}## [${title}](${node.url})\n\n${desc}\n\n*${siteName}*`;
 
       // Step 4: Update the text node directly on the canvas
-      const updated = await this.updateCanvasNodeTextWithRetry(node.id, cardText);
+      const updated = await this.updateCanvasNodeText(canvasFile, node.id, cardText);
 
       if (!updated) {
         throw new Error('Failed to update canvas node');
@@ -241,46 +296,21 @@ export default class DetailedCanvasPlugin extends Plugin {
     }
   }
 
-  // Update a canvas node's text content directly through the internal API
-  private updateCanvasNodeText(nodeId: string, newText: string): boolean {
+  // Update a canvas node's text content via file I/O — works on mobile and desktop
+  private async updateCanvasNodeText(canvasFile: TFile, nodeId: string, newText: string): Promise<boolean> {
     try {
-      const view = this.getActiveCanvasView();
-      if (!view || !('canvas' in view)) return false;
-
-      type CanvasInternal = {
-        nodes: Map<string, { setText?: (text: string) => void; requestSave?: () => void }>;
-        requestSave?: () => void;
-      };
-
-      const canvas = (view as ItemView & { canvas: CanvasInternal }).canvas;
-      if (!canvas?.nodes) return false;
-
-      const canvasNode = canvas.nodes.get(nodeId);
-      if (!canvasNode) return false;
-
-      if (canvasNode.setText) {
-        canvasNode.setText(newText);
-      }
-      if (canvas.requestSave) {
-        canvas.requestSave();
-      }
-
+      await this.app.vault.process(canvasFile, (content) => {
+        const canvasData = JSON.parse(content);
+        const node = canvasData.nodes?.find((n: { id: string }) => n.id === nodeId);
+        if (!node) return content; // Return unchanged if node not found
+        node.text = newText;
+        node.type = 'text'; // Convert link nodes to text nodes for enrichment
+        return JSON.stringify(canvasData, null, '\t');
+      });
       return true;
     } catch {
       return false;
     }
-  }
-
-  // Retry wrapper for updateCanvasNodeText (canvas internal state may lag behind file changes)
-  private async updateCanvasNodeTextWithRetry(nodeId: string, text: string, retries = 3): Promise<boolean> {
-    for (let i = 0; i < retries; i++) {
-      if (this.updateCanvasNodeText(nodeId, text)) {
-        return true;
-      }
-      // Wait for canvas internal state to sync
-      await new Promise(resolve => setTimeout(resolve, 300));
-    }
-    return false;
   }
 
   // Enrich selected links in canvas view

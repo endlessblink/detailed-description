@@ -5,6 +5,8 @@ export class ScraperService {
   private static readonly TWITTER_HOSTS = ['twitter.com', 'www.twitter.com', 'x.com', 'www.x.com'];
   private static readonly TWITTER_STATUS_RE = /\/([^/]+)\/status\/(\d+)/;
   private static readonly REDDIT_HOSTS = ['reddit.com', 'www.reddit.com', 'old.reddit.com', 'new.reddit.com'];
+  private static readonly TIKTOK_HOSTS = ['tiktok.com', 'www.tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com', 'm.tiktok.com'];
+  private static readonly TIKTOK_SHORT_HOSTS = ['vm.tiktok.com', 'vt.tiktok.com'];
 
   /**
    * Scrape metadata and content from a URL
@@ -24,6 +26,11 @@ export class ScraperService {
         return await this.scrapeReddit(url);
       }
 
+      // Use TikTok oEmbed API for TikTok URLs
+      if (ScraperService.TIKTOK_HOSTS.includes(host)) {
+        return await this.scrapeTikTok(url);
+      }
+
       // Fetch URL using Obsidian's requestUrl API (bypasses CORS)
       const response = await requestUrl({
         url,
@@ -36,12 +43,31 @@ export class ScraperService {
         return this.createEmptyMetadata(url);
       }
 
+      // Extract base URL for resolving relative URLs
+      const baseUrl = new URL(url).origin;
+
+      // Mobile fallback: DOMParser is unavailable on some Obsidian mobile builds
+      if (typeof DOMParser === 'undefined') {
+        const titleMatch = response.text.match(/<title[^>]*>([^<]+)<\/title>/i);
+        const descMatch = response.text.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
+          || response.text.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
+        const ogImageMatch = response.text.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i);
+        const siteNameMatch = response.text.match(/<meta[^>]*property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i);
+
+        return {
+          url,
+          title: titleMatch?.[1]?.trim() ?? null,
+          description: descMatch?.[1]?.trim() ?? null,
+          ogImage: ogImageMatch?.[1] ? this.resolveUrl(ogImageMatch[1], baseUrl) : null,
+          siteName: siteNameMatch?.[1] ?? null,
+          favicon: `${baseUrl}/favicon.ico`,
+          textContent: '',
+        };
+      }
+
       // Parse HTML with DOMParser
       const parser = new DOMParser();
       const doc = parser.parseFromString(response.text, 'text/html');
-
-      // Extract base URL for resolving relative URLs
-      const baseUrl = new URL(url).origin;
 
       // Extract metadata
       const title = this.extractTitle(doc);
@@ -210,6 +236,81 @@ export class ScraperService {
       };
     } catch (error) {
       console.warn(`Reddit scrape failed for ${originalUrl}:`, error);
+      return this.createEmptyMetadata(originalUrl);
+    }
+  }
+
+  /**
+   * Scrape TikTok URLs via their official oEmbed API
+   */
+  private async scrapeTikTok(originalUrl: string): Promise<UrlMetadata> {
+    try {
+      // Short URLs (vm.tiktok.com, vt.tiktok.com) must be resolved first —
+      // the oEmbed API only accepts canonical tiktok.com URLs
+      let resolvedUrl = originalUrl;
+      const host = new URL(originalUrl).hostname.toLowerCase();
+      if (ScraperService.TIKTOK_SHORT_HOSTS.includes(host)) {
+        try {
+          const getResponse = await requestUrl({
+            url: originalUrl,
+            method: 'GET',
+            throw: false,
+          });
+          if (getResponse.status === 200) {
+            // TikTok embeds canonical URL in JSON data (not as an HTML tag)
+            // Format: "canonical":"https:\u002F\u002Fwww.tiktok.com\u002F@user\u002Fvideo\u002F123"
+            const canonicalMatch = getResponse.text.match(/"canonical"\s*:\s*"([^"]+)"/);
+            if (canonicalMatch?.[1]) {
+              // Unescape JSON unicode sequences (\u002F → /)
+              resolvedUrl = JSON.parse(`"${canonicalMatch[1]}"`);
+            }
+          }
+        } catch (e) {
+          console.warn(`Failed to resolve TikTok short URL ${originalUrl}:`, e);
+        }
+      }
+
+      const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(resolvedUrl)}`;
+
+      const response = await requestUrl({
+        url: oembedUrl,
+        method: 'GET',
+        headers: { 'User-Agent': 'DetailedCanvas-ObsidianPlugin/1.0' },
+        throw: false,
+      });
+
+      if (response.status !== 200) {
+        console.warn(`TikTok oEmbed API returned ${response.status} for ${originalUrl}`);
+        return this.createEmptyMetadata(originalUrl);
+      }
+
+      const data = response.json;
+      if (!data) {
+        return this.createEmptyMetadata(originalUrl);
+      }
+
+      let ogImage: string | null = data.thumbnail_url ?? null;
+      if (ogImage) {
+        ogImage = await this.validateImageUrl(ogImage);
+      }
+
+      const authorName = data.author_name ?? 'Unknown';
+      const authorHandle = data.author_unique_id ?? authorName;
+      const title = data.title
+        ? `${authorName} (@${authorHandle})`
+        : `${authorName} (@${authorHandle}) on TikTok`;
+
+      return {
+        url: originalUrl,
+        title,
+        description: data.title ?? null,
+        ogImage,
+        siteName: 'TikTok',
+        favicon: null,
+        textContent: data.title ?? '',
+      };
+    } catch (error) {
+      console.warn(`TikTok scrape failed for ${originalUrl}:`, error);
       return this.createEmptyMetadata(originalUrl);
     }
   }
